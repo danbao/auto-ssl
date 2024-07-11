@@ -1,0 +1,52 @@
+name: Update Check List
+
+on:
+  schedule: # execute every 24 hours
+    - cron: "35 23 * * *"
+  workflow_dispatch:
+
+env:
+    EMAIL: ${{ secrets.EMAIL }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.repository.owner.id == github.event.sender.id
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Update CHECK_LIST.md
+      run: |
+        git config --global user.email $EMAIL
+        git config --global user.name acme
+        CURRENT_TIME=$(date +"%Y-%m-%d %H:%M:%S")
+        echo "## Certificate Status (Updated at $CURRENT_TIME)" > CHECK_LIST.md
+        echo "| Domain | Expiry Date (EC) | Issuer (EC) | Expiry Date (RSA) | Issuer (RSA) |" >> CHECK_LIST.md
+        echo "|--------|------------------|-------------|-------------------|--------------|" >> CHECK_LIST.md
+        for domain_dir in ./ssl/*/; do
+          domain=$(basename "$domain_dir")
+          if [ -f "$domain_dir/$domain.cer" ]; then
+            expiry_date_ec=$(openssl x509 -enddate -noout -in "$domain_dir/$domain.cer" | cut -d= -f2)
+            issuer_ec=$(openssl x509 -issuer -noout -in "$domain_dir/$domain.cer" | cut -d, -f2)
+          else
+            expiry_date_ec="N/A"
+            issuer_ec="N/A"
+          fi
+
+          if [ -f "$domain_dir/rsa/$domain.cer" ]; then
+            expiry_date_rsa=$(openssl x509 -enddate -noout -in "$domain_dir/rsa/$domain.cer" | cut -d= -f2)
+            issuer_rsa=$(openssl x509 -issuer -noout -in "$domain_dir/rsa/$domain.cer" | cut -d, -f2)
+          else
+            expiry_date_rsa="N/A"
+            issuer_rsa="N/A"
+          fi
+          echo "| $domain | $expiry_date_ec | $issuer_ec | $expiry_date_rsa | $issuer_rsa |" >> CHECK_LIST.md
+        done
+        git add CHECK_LIST.md
+        git commit -m "Update CHECK_LIST.md with certificate expiry dates and execution time at $CURRENT_TIME"
+
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
