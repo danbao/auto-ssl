@@ -1,5 +1,10 @@
 # Auto-SSL
 
+----
+# Warning!!!看下面👇！！！ 
+## 一定要新建个private repo，然后把这里的代码 push 到你自己的 github private repo,不然Cert的私钥就泄露了
+----
+
 ## Introduction
 这是一个使用 GitHub Actions 通过 acme.sh 自动申请 SSL 证书的项目。
 
