@@ -1,0 +1,99 @@
+name: DnsPod SSL Certificates
+
+on:
+  schedule: # execute every 24 hours
+    - cron: "35 6 * * *"
+  workflow_dispatch:
+
+env:
+    ACME: /home/runner/.acme.sh/acme.sh
+    DP_ID: ${{ secrets.DP_ID }}
+    DP_KEY: ${{ secrets.DP_KEY }}
+    EMAIL: ${{ secrets.EMAIL }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.repository.owner.id == github.event.sender.id # 除了定时和repo owner手动触发的事件外， 其他不执行
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Install & Configure acme.sh
+      run: |
+        curl  https://get.acme.sh | sh -s email=$EMAIL
+    - name: Issue & Deploy Certificates
+      run: |
+        export DP_Id=$DP_ID
+        export DP_Key=$DP_KEY
+
+        git config --global user.email $EMAIL
+        git config --global user.name acme
+
+        # 如果想要其他证书发行机构，可以把 acme.sh 的ca目录拷贝到 repo 的 ca目录
+        # mkdir -p /home/runner/.acme.sh/ca/
+        # cp -r ca/* /home/runner/.acme.sh/ca/
+
+        check_certificate_validity() {
+          cert_path=$1
+          if [ -f "$cert_path" ]; then
+            if openssl x509 -checkend $(( 30 * 86400 )) -noout -in "$cert_path"; then
+              echo "Certificate at $cert_path is valid for more than 30 days, skipping..."
+              return 0
+            else
+              return 1
+            fi
+          else
+            return 1
+          fi
+        }
+
+        issue_and_install_certificate() {
+          domain=$1
+          cert_type=$2 # "EC" or "RSA"
+          acme_server=$3 # default choose "letsencrypt" 其他 CA 请参考 https://github.com/acmesh-official/acme.sh/wiki/CA
+          keylength=$4 # empty for EC, "3072" for RSA
+
+          cert_path="./ssl/$domain"
+          [ "$cert_type" = "RSA" ] && cert_path="$cert_path/rsa"
+          cert_file="$cert_path/$domain.cer"
+          key_file="$cert_path/$domain.key"
+
+          # Issue certificate
+          issue_status=0
+          $ACME --issue --server $acme_server --debug --dns dns_dp -d "$domain" -d "*.$domain" ${keylength:+--keylength $keylength}|| issue_status=$?
+          if [ $issue_status -ne 0 ]; then
+            echo "Failed to issue $cert_type certificate for $domain, skipping..."
+            return
+          fi
+
+          # Install certificate
+          install_status=0
+          $ACME --installcert -d "$domain" --key-file "$key_file" --fullchain-file "$cert_file" || install_status=$?
+          if [ $install_status -ne 0 ]; then
+            echo "Failed to install $cert_type certificate for $domain, skipping..."
+            return
+          fi
+
+          TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
+          git add $cert_path/
+          git commit -m "Update $cert_type certificate files for $domain at $TIMESTAMP"
+        }
+
+        while IFS= read -r domain || [ -n "$domain" ]; do
+          mkdir -p "./ssl/$domain/rsa"
+
+          # Check and issue/install EC certificate
+          if ! check_certificate_validity "./ssl/$domain/$domain.cer"; then
+            issue_and_install_certificate "$domain" "EC" "letsencrypt" ""
+          fi
+
+          # Check and issue/install RSA certificate
+          if ! check_certificate_validity "./ssl/$domain/rsa/$domain.cer"; then
+            issue_and_install_certificate "$domain" "RSA" "letsencrypt" "3072"
+          fi
+
+        done < dnspod_domains_list.txt
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
