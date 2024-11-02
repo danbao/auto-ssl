@@ -1,0 +1,8 @@
+account
+52490bcffd795be081b9f3d05a7e5583
+token
+qv--WwpvkxOSuk7-jg-mFb7EKbd9cg6BHmuj2A4X
+
+curl -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+     -H "Authorization: Bearer qv--WwpvkxOSuk7-jg-mFb7EKbd9cg6BHmuj2A4X" \
+     -H "Content-Type:application/json"
