@@ -1,4 +1,4 @@
-## Certificate Status (Updated at 2025-10-08 23:36:56)
+## Certificate Status (Updated at 2025-10-09 23:36:40)
 | Domain | Expiry Date (EC) | Issuer (EC) | Expiry Date (RSA) | Issuer (RSA) |
 |--------|------------------|-------------|-------------------|--------------|
 | showcolor.cc | Dec  8 05:53:47 2025 GMT |  O = Let's Encrypt | Dec  5 05:48:59 2025 GMT |  O = Let's Encrypt |
